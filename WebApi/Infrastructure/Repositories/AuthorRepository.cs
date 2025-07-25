@@ -14,24 +14,25 @@ public class AuthorRepository(IConfiguration config) : IAuthorRepository
         FROM Authors a
           INNER JOIN Books b ON a.Id = b.AuthorId";
 
-    private record AuthorBook(
-        string AuthorId,
-        string AuthorName,
-        string AuthorCellphone,
-        string AuthorEmail,
-        string BookId,
-        string BookName,
-        decimal BookPrice
-    );
+    private class AuthorBook
+    {
+        public string AuthorId { get; init; }
+        public string AuthorName { get; init; }
+        public string AuthorCellphone { get; init; }
+        public string AuthorEmail { get; init; }
+        public string BookId { get; init; }
+        public string BookName { get; init; }
+        public decimal BookPrice { get; init; }
+    };
 
-    public async Task<IEnumerable<Author>> GetAllAsync(bool getBooks = false)
+    public async Task<IEnumerable<Author>> GetAllAsync()
     {
         using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
 
-        if (getBooks is false)
-            return await connection.QueryAsync<Author>("SELECT * FROM Authors");
-
-        return (await connection.QueryAsync<AuthorBook>(GetAuthorsWithBooks))
+        var authors = await connection.QueryAsync<AuthorBook>(GetAuthorsWithBooks);
+            
+        return authors
             .GroupBy(a => a.AuthorId)
             .Select(a => new Author
             {
@@ -49,24 +50,19 @@ public class AuthorRepository(IConfiguration config) : IAuthorRepository
             });
     }
 
-    public async Task<Author> GetByIdAsync(string id, bool getBooks = false)
+    public async Task<Author> GetByIdOrEmailAsync(string id = null, string email = null)
     {
         using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
 
-        if (getBooks is false)
-            return await connection.QueryFirstOrDefaultAsync<Author>(
-                "SELECT * FROM Authors WHERE Id = @Id",
-                new { Id = id }
-            );
+        bool hasId = string.IsNullOrWhiteSpace(id) is false;
         
-        var authorBook = await connection.QueryFirstOrDefaultAsync<AuthorBook>(
-            $"{GetAuthorsWithBooks} WHERE a.Id = @Id",
-            new { Id = id }
-        );
-        
+        string field = hasId ? "a.Id" : "a.Email";
+        string filter = hasId ? id : email;
+
         return (await connection.QueryAsync<AuthorBook>(
-                $"{GetAuthorsWithBooks} WHERE a.Id = @Id",
-                new { Id = id }))
+                $"{GetAuthorsWithBooks} WHERE {field} = @Filter",
+                new { Filter = filter }))
             .GroupBy(a => a.AuthorId)
             .Select(a => new Author
             {
@@ -88,6 +84,8 @@ public class AuthorRepository(IConfiguration config) : IAuthorRepository
     public async Task CreateAsync(Author author)
     {
         using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        
         var sql = @"INSERT INTO Authors (Id, Name, Cellphone, Email) VALUES (@Id, @Name, @Cellphone, @Email)";
         await connection.ExecuteAsync(sql, author);
     }
@@ -95,6 +93,8 @@ public class AuthorRepository(IConfiguration config) : IAuthorRepository
     public async Task UpdateAsync(Author author)
     {
         using var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        
         var sql = @"UPDATE Authors SET Name = @Name, Cellphone = @Cellphone, Email = @Email WHERE Id = @Id";
         await connection.ExecuteAsync(sql, author);
     }

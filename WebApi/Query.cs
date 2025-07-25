@@ -1,10 +1,14 @@
+using HotChocolate.Language;
+using HotChocolate.Resolvers;
 using WebApi.Infrastructure.Repositories;
 using WebApi.Models;
 using WebApi.Types;
 
 namespace WebApi;
 
-public class Query(IAuthorRepository authorRepository, IBookRepository bookRepository)
+public class Query(
+    IAuthorRepository authorRepository,
+    IBookRepository bookRepository)
 {
     private static BookType BookToBookType(Book book) =>
         new BookType
@@ -23,17 +27,29 @@ public class Query(IAuthorRepository authorRepository, IBookRepository bookRepos
             Email = author.Email,
             Books = author.Books.ToList().ConvertAll(BookToBookType)
         };
+
+    private bool HasField(IResolverContext context, string root, string field) =>
+        context.Selection.SyntaxNodes
+            .Any(node => node.Name.Value == root && node.SelectionSet.Selections
+                .Any(subNode => ((FieldNode)subNode).Name.Value == field));
     
-    public async Task<IEnumerable<AuthorType>> GetAllAuthorsAsync()
+    [GraphQLName("authors")]
+    public async Task<IEnumerable<AuthorType>> GetAllAuthorsAsync(IResolverContext context)
     {
-        var authors = await authorRepository.GetAllAsync(true);
+        bool hasBooks = context.IsSelected(nameof(AuthorType.Books).ToLower());
+        //bool hasBooks = HasField(context, "authors", nameof(AuthorType.Books).ToLower());
+        
+        // TODO: repassar variável para melhorar consulta no repositório
+        
+        var authors = await authorRepository.GetAllAsync();
 
         return authors.Select(AuthorToAuthorType);
     }
     
-    public async Task<AuthorType> GetAuthorByIdAsync(string id)
+    [GraphQLName("author")]
+    public async Task<AuthorType> GetAuthorByIdOrEmailAsync(string id = null, string email = null)
     {
-        var author = await authorRepository.GetByIdAsync(id,true);
+        var author = await authorRepository.GetByIdOrEmailAsync(id, email);
 
         if (author is null)
             return null;
@@ -41,6 +57,7 @@ public class Query(IAuthorRepository authorRepository, IBookRepository bookRepos
         return AuthorToAuthorType(author);
     }
     
+    [GraphQLName("books")]
     public async Task<IEnumerable<BookType>> GetAllBooksByAuthorIdAsync(string authorId)
     {
         var books = await bookRepository.GetByAuthorIdAsync(authorId);
@@ -48,6 +65,7 @@ public class Query(IAuthorRepository authorRepository, IBookRepository bookRepos
         return books.Select(BookToBookType);
     }
 
+    [GraphQLName("book")]
     public async Task<BookType> GetBookByIdAsync(string id)
     {
         var book = await bookRepository.GetByIdAsync(id);

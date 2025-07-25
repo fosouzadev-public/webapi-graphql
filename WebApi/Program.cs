@@ -14,8 +14,8 @@ builder.Services.AddSingleton<IBookRepository, BookRepository>();
 builder.Services
     .AddGraphQLServer()
     .AddQueryType<Query>()
-    .AddType<AuthorType>()
-    .AddType<BookType>();
+    .AddType<AuthorTypeDescriptor>()
+    .AddType<BookTypeDescriptor>();
 
 var app = builder.Build();
 app.MapGraphQL();
